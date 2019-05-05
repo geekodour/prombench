@@ -24,8 +24,11 @@ import (
 
 	"github.com/prometheus/prombench/pkg/provider"
 
+	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
+	prowJobv1 "k8s.io/test-infra/prow/apis/prowjobs/v1"
 )
 
 // Resource holds the resource objects after parsing deployment files.
@@ -36,7 +39,8 @@ type Resource struct {
 
 // K8s holds the fields used to generate API reqeust from within a cluster.
 type K8s struct {
-	clt *kubernetes.Clientset
+	clt       *kubernetes.Clientset
+	apiextclt *apiextensionsclient.Clientset
 	// DeploymentFiles files provided from the cli.
 	DeploymentFiles []string
 	// Vaiables to subtitude in the DeploymentFiles.
@@ -57,18 +61,24 @@ func New(ctx context.Context, config *clientcmdapi.Config) (*K8s, error) {
 	} else {
 		restConfig, err = clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{}).ClientConfig()
 	}
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "k8s config error")
 	}
+
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "k8s client error")
 	}
 
+	apiextClientset, err := apiextensionsclient.NewForConfig(restConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "k8s api extensions client error")
+	}
+
 	return &K8s{
 		ctx:            ctx,
 		clt:            clientset,
+		apiextclt:      apiextClientset,
 		DeploymentVars: make(map[string]string),
 	}, nil
 }
@@ -147,6 +157,8 @@ func (c *K8s) ResourceApply(deployments []Resource) error {
 				err = c.secretApply(resource)
 			case "persistentvolumeclaim":
 				err = c.persistentVolumeClaimApply(resource)
+			case "customresourcedefinition":
+				err = c.customResourceDefinitionApply(resource)
 			default:
 				err = fmt.Errorf("creating request for unimplimented resource type:%v", kind)
 			}
@@ -192,6 +204,8 @@ func (c *K8s) ResourceDelete(deployments []Resource) error {
 				err = c.secretDelete(resource)
 			case "persistentvolumeclaim":
 				err = c.persistentVolumeClaimDelete(resource)
+			case "customresourcedefinition":
+				err = c.customResourceDefinitionDelete(resource)
 			default:
 				err = fmt.Errorf("deleting request for unimplimented resource type:%v", kind)
 			}
@@ -416,7 +430,64 @@ func (c *K8s) deploymentApply(resource runtime.Object) error {
 		func() (bool, error) { return c.deploymentReady(resource) })
 }
 
+func (c *K8s) customResourceDefinitionApply(resource runtime.Object) error {
+	var req interface{}
+	switch v := resource.(type) {
+	case prowJobv1.ProwJob:
+		fmt.Println("cools")
+		req = resource.(prowJobv1.ProwJob)
+	default:
+		fmt.Fatalln("CRD not found")
+	}
+	fmt.Println(req)
+	return nil
+	/*
+
+		kind := resource.GetObjectKind().GroupVersionKind().Kind
+		if len(req.Namespace) == 0 {
+			req.Namespace = "default"
+		}
+
+		switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
+		case "v1beta1":
+			client := c.clt.AppsV1().Deployments(req.Namespace)
+			list, err := client.List(apiMetaV1.ListOptions{})
+			if err != nil {
+				return errors.Wrapf(err, "error listing resource : %v, name: %v", kind, req.Name)
+			}
+
+			var exists bool
+			for _, l := range list.Items {
+				if l.Name == req.Name {
+					exists = true
+					break
+				}
+			}
+
+			if exists {
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					_, err := client.Update(req)
+					return err
+				}); err != nil {
+					return errors.Wrapf(err, "resource update failed - kind: %v, name: %v", kind, req.Name)
+				}
+				log.Printf("resource updated - kind: %v, name: %v", kind, req.Name)
+				return nil
+			} else if _, err := client.Create(req); err != nil {
+				return errors.Wrapf(err, "resource creation failed - kind: %v, name: %v", kind, req.Name)
+			}
+			log.Printf("resource created - kind: %v, name: %v", kind, req.Name)
+		default:
+			return fmt.Errorf("unknown object version: %v kind:'%v', name:'%v'", v, kind, req.Name)
+		}
+		return provider.RetryUntilTrue(
+			fmt.Sprintf("applying deployment:%v", req.Name),
+			provider.GlobalRetryCount,
+			func() (bool, error) { return c.deploymentReady(resource) })*/
+}
+
 func (c *K8s) ingressApply(resource runtime.Object) error {
+	// TODO(geekodour): maybe use Ingress from networking.k8s.io/v1beta1
 	req := resource.(*apiExtensionsV1beta1.Ingress)
 	kind := resource.GetObjectKind().GroupVersionKind().Kind
 	if len(req.Namespace) == 0 {
