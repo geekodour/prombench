@@ -24,12 +24,15 @@ import (
 
 	"github.com/prometheus/prombench/pkg/provider"
 
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-
-	prowJobv1 "k8s.io/test-infra/prow/apis/prowjobs/v1"
 )
+
+func init(){
+	apiextensions.AddToScheme(scheme.Scheme)
+}
 
 // Resource holds the resource objects after parsing deployment files.
 type Resource struct {
@@ -431,14 +434,11 @@ func (c *K8s) deploymentApply(resource runtime.Object) error {
 }
 
 func (c *K8s) customResourceDefinitionApply(resource runtime.Object) error {
-	var req interface{}
-	switch v := resource.(type) {
-	case prowJobv1.ProwJob:
-		fmt.Println("cools")
-		req = resource.(prowJobv1.ProwJob)
-	default:
-		fmt.Fatalln("CRD not found")
-	}
+	req := resource.(*apiextensions.CustomResourceDefinition)
+	//kind := resource.GetObjectKind().GroupVersionKind().Kind
+	//if len(req.Namespace) == 0 {
+	//	req.Namespace = "default"
+	//}
 	fmt.Println(req)
 	return nil
 	/*
@@ -920,6 +920,9 @@ func (c *K8s) deploymentDelete(resource runtime.Object) error {
 		return fmt.Errorf("unknown object version: %v kind:'%v', name:'%v'", v, kind, req.Name)
 	}
 	return nil
+}
+
+func (c *K8s) customResourceDefinitionDelete(resource runtime.Object) error {
 }
 
 func (c *K8s) ingressDelete(resource runtime.Object) error {
