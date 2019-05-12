@@ -24,14 +24,14 @@ import (
 
 	"github.com/prometheus/prombench/pkg/provider"
 
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	apiserverextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiserverextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-func init(){
-	apiextensions.AddToScheme(scheme.Scheme)
+func init() {
+	apiserverextensionsv1beta1.AddToScheme(scheme.Scheme)
 }
 
 // Resource holds the resource objects after parsing deployment files.
@@ -43,7 +43,7 @@ type Resource struct {
 // K8s holds the fields used to generate API reqeust from within a cluster.
 type K8s struct {
 	clt       *kubernetes.Clientset
-	apiextclt *apiextensionsclient.Clientset
+	apiextclt *apiserverextensionsclient.Clientset
 	// DeploymentFiles files provided from the cli.
 	DeploymentFiles []string
 	// Vaiables to subtitude in the DeploymentFiles.
@@ -73,7 +73,7 @@ func New(ctx context.Context, config *clientcmdapi.Config) (*K8s, error) {
 		return nil, errors.Wrapf(err, "k8s client error")
 	}
 
-	apiextClientset, err := apiextensionsclient.NewForConfig(restConfig)
+	apiextClientset, err := apiserverextensionsclient.NewForConfig(restConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "k8s api extensions client error")
 	}
@@ -434,56 +434,44 @@ func (c *K8s) deploymentApply(resource runtime.Object) error {
 }
 
 func (c *K8s) customResourceDefinitionApply(resource runtime.Object) error {
-	req := resource.(*apiextensions.CustomResourceDefinition)
-	//kind := resource.GetObjectKind().GroupVersionKind().Kind
-	//if len(req.Namespace) == 0 {
-	//	req.Namespace = "default"
-	//}
-	fmt.Println(req)
+	req := resource.(*apiserverextensionsv1beta1.CustomResourceDefinition)
+	kind := resource.GetObjectKind().GroupVersionKind().Kind
+	if len(req.Namespace) == 0 {
+		req.Namespace = "default"
+	}
+
+	switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
+	case "v1beta1":
+		client := c.apiextclt.ApiextensionsV1beta1().CustomResourceDefinitions()
+		list, err := client.List(apiMetaV1.ListOptions{})
+		if err != nil {
+			return errors.Wrapf(err, "error listing resource : %v, name: %v", kind, req.Name)
+		}
+		var exists bool
+		for _, l := range list.Items {
+			if l.Name == req.Name {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				_, err := client.Update(req)
+				return err
+			}); err != nil {
+				return errors.Wrapf(err, "resource update failed - kind: %v, name: %v", kind, req.Name)
+			}
+			log.Printf("resource updated - kind: %v, name: %v", kind, req.Name)
+			return nil
+		} else if _, err := client.Create(req); err != nil {
+			return errors.Wrapf(err, "resource creation failed - kind: %v, name: %v", kind, req.Name)
+		}
+		log.Printf("resource created - kind: %v, name: %v", kind, req.Name)
+	default:
+		return fmt.Errorf("unknown object version: %v kind:'%v', name:'%v'", v, kind, req.Name)
+	}
+
 	return nil
-	/*
-
-		kind := resource.GetObjectKind().GroupVersionKind().Kind
-		if len(req.Namespace) == 0 {
-			req.Namespace = "default"
-		}
-
-		switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
-		case "v1beta1":
-			client := c.clt.AppsV1().Deployments(req.Namespace)
-			list, err := client.List(apiMetaV1.ListOptions{})
-			if err != nil {
-				return errors.Wrapf(err, "error listing resource : %v, name: %v", kind, req.Name)
-			}
-
-			var exists bool
-			for _, l := range list.Items {
-				if l.Name == req.Name {
-					exists = true
-					break
-				}
-			}
-
-			if exists {
-				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					_, err := client.Update(req)
-					return err
-				}); err != nil {
-					return errors.Wrapf(err, "resource update failed - kind: %v, name: %v", kind, req.Name)
-				}
-				log.Printf("resource updated - kind: %v, name: %v", kind, req.Name)
-				return nil
-			} else if _, err := client.Create(req); err != nil {
-				return errors.Wrapf(err, "resource creation failed - kind: %v, name: %v", kind, req.Name)
-			}
-			log.Printf("resource created - kind: %v, name: %v", kind, req.Name)
-		default:
-			return fmt.Errorf("unknown object version: %v kind:'%v', name:'%v'", v, kind, req.Name)
-		}
-		return provider.RetryUntilTrue(
-			fmt.Sprintf("applying deployment:%v", req.Name),
-			provider.GlobalRetryCount,
-			func() (bool, error) { return c.deploymentReady(resource) })*/
 }
 
 func (c *K8s) ingressApply(resource runtime.Object) error {
@@ -923,6 +911,25 @@ func (c *K8s) deploymentDelete(resource runtime.Object) error {
 }
 
 func (c *K8s) customResourceDefinitionDelete(resource runtime.Object) error {
+	req := resource.(*apiserverextensionsv1beta1.CustomResourceDefinition)
+	kind := resource.GetObjectKind().GroupVersionKind().Kind
+	if len(req.Namespace) == 0 {
+		req.Namespace = "default"
+	}
+
+	switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
+	case "v1beta1":
+		client := c.apiextclt.ApiextensionsV1beta1().CustomResourceDefinitions()
+		delPolicy := apiMetaV1.DeletePropagationForeground
+		if err := client.Delete(req.Name, &apiMetaV1.DeleteOptions{PropagationPolicy: &delPolicy}); err != nil {
+			return errors.Wrapf(err, "resource delete failed - kind: %v, name: %v", kind, req.Name)
+		}
+		log.Printf("resource deleted - kind: %v , name: %v", kind, req.Name)
+	default:
+		return fmt.Errorf("unknown object version: %v kind:'%v', name:'%v'", v, kind, req.Name)
+	}
+
+	return nil
 }
 
 func (c *K8s) ingressDelete(resource runtime.Object) error {
