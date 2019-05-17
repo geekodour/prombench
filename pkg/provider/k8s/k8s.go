@@ -9,7 +9,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	appsV1 "k8s.io/api/apps/v1"
 	apiCoreV1 "k8s.io/api/core/v1"
-	apiExtensionsV1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingV1beta1 "k8s.io/api/networking/v1beta1"
 	rbac "k8s.io/api/rbac/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	apiMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -417,7 +417,7 @@ func (c *K8s) deploymentApply(resource runtime.Object) error {
 }
 
 func (c *K8s) ingressApply(resource runtime.Object) error {
-	req := resource.(*apiExtensionsV1beta1.Ingress)
+	req := resource.(*networkingV1beta1.Ingress)
 	kind := resource.GetObjectKind().GroupVersionKind().Kind
 	if len(req.Namespace) == 0 {
 		req.Namespace = "default"
@@ -425,7 +425,7 @@ func (c *K8s) ingressApply(resource runtime.Object) error {
 
 	switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
 	case "v1beta1":
-		client := c.clt.ExtensionsV1beta1().Ingresses(req.Namespace)
+		client := c.clt.NetworkingV1beta1().Ingresses(req.Namespace)
 		list, err := client.List(apiMetaV1.ListOptions{})
 		if err != nil {
 			return errors.Wrapf(err, "error listing resource : %v, name: %v", kind, req.Name)
@@ -852,7 +852,7 @@ func (c *K8s) deploymentDelete(resource runtime.Object) error {
 }
 
 func (c *K8s) ingressDelete(resource runtime.Object) error {
-	req := resource.(*apiExtensionsV1beta1.Ingress)
+	req := resource.(*networkingV1beta1.Ingress)
 	kind := resource.GetObjectKind().GroupVersionKind().Kind
 	if len(req.Namespace) == 0 {
 		req.Namespace = "default"
@@ -860,7 +860,7 @@ func (c *K8s) ingressDelete(resource runtime.Object) error {
 
 	switch v := resource.GetObjectKind().GroupVersionKind().Version; v {
 	case "v1beta1":
-		client := c.clt.ExtensionsV1beta1().Ingresses(req.Namespace)
+		client := c.clt.NetworkingV1beta1().Ingresses(req.Namespace)
 		delPolicy := apiMetaV1.DeletePropagationForeground
 		if err := client.Delete(req.Name, &apiMetaV1.DeleteOptions{PropagationPolicy: &delPolicy}); err != nil {
 			return errors.Wrapf(err, "resource delete failed - kind: %v, name: %v", kind, req.Name)

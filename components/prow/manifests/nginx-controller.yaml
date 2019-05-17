@@ -301,7 +301,7 @@ spec:
     port: 443
     targetPort: https
 ---
-apiVersion: extensions/v1beta1
+apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
 metadata:
   name: ing
@@ -341,7 +341,7 @@ spec:
           serviceName: hook
           servicePort: http
 ---
-apiVersion: extensions/v1beta1
+apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
 metadata:
   name: ingress-prometheus-meta
@@ -357,7 +357,7 @@ spec:
           servicePort: prom-web
         path: /prometheus-meta
 ---
-apiVersion: extensions/v1beta1
+apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
 metadata:
   name: ingress-grafana
