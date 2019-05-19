@@ -70,16 +70,16 @@ export PR_NUMBER=<PR to benchmark against the selected $RELEASE>
 
 - Create the nodepools for the k8s objects
 ```
-./prombench gke nodepool create -a ${AUTH_FILE} \
-    -v ZONE:${ZONE} -v PROJECT_ID:${PROJECT_ID} -v CLUSTER_NAME:${CLUSTER_NAME} \
-    -v PR_NUMBER:${PR_NUMBER} -f components/prombench/nodepools.yaml
+./prombench gke nodepool create -a $AUTH_FILE \
+    -v ZONE:$ZONE -v PROJECT_ID:$PROJECT_ID -v CLUSTER_NAME:$CLUSTER_NAME \
+    -v PR_NUMBER:$PR_NUMBER -f components/prombench/nodepools.yaml
 ```
 
 - Deploy the k8s objects
 ```
-./prombench gke resource apply -a ${AUTH_FILE} \
-    -v ZONE:${ZONE} -v PROJECT_ID:${PROJECT_ID} -v CLUSTER_NAME:${CLUSTER_NAME} \
-    -v PR_NUMBER:${PR_NUMBER} -v RELEASE:${RELEASE} -v DOMAIN_NAME:${DOMAIN_NAME}\
+./prombench gke resource apply -a $AUTH_FILE \
+    -v ZONE:$ZONE -v PROJECT_ID:$PROJECT_ID -v CLUSTER_NAME:$CLUSTER_NAME \
+    -v PR_NUMBER:$PR_NUMBER -v RELEASE:$RELEASE -v DOMAIN_NAME:$DOMAIN_NAME \
     -f components/prombench/manifests/benchmark
 ```
 
