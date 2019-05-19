@@ -121,7 +121,8 @@ export OAUTH_TOKEN=***Replace with the generated token from github***
   * oauth is used when sending requests to the GitHub api.
   * gke auth is used when scaling up and down the cluster.
 ```
-./prombench gke resource apply -a $AUTH_FILE -v ZONE:$ZONE -v CLUSTER_NAME:$CLUSTER_NAME \
+./prombench gke resource apply -a $AUTH_FILE -v ZONE:$ZONE \
+    -v CLUSTER_NAME:$CLUSTER_NAME -v PROJECT_ID:$PROJECT_ID \
     -f components/prow/manifests/secrets.yaml \
     -v HMAC_TOKEN="$(printf $HMAC_TOKEN | base64 -w 0)" \
     -v OAUTH_TOKEN="$(printf $OAUTH_TOKEN | base64 -w 0)" \
