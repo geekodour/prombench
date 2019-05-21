@@ -312,34 +312,14 @@ spec:
   rules:
   - http:
       paths:
-      - path: /
+      - path: /*
         backend:
           serviceName: deck
-          servicePort: http
-      - path: /pr
-        backend:
-          serviceName: deck
-          servicePort: http
-      - path: /command-help
-        backend:
-          serviceName: deck
-          servicePort: http
-      - path: /tide
-        backend:
-          serviceName: deck
-          servicePort: http
-      - path: /plugins
-        backend:
-          serviceName: deck
-          servicePort: http
-      - path: /log
-        backend:
-          serviceName: deck
-          servicePort: http
+          servicePort: 80
       - path: /hook
         backend:
           serviceName: hook
-          servicePort: http
+          servicePort: 8888
 ---
 apiVersion: extensions/v1beta1
 kind: Ingress
