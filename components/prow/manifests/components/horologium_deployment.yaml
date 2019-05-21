@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: horologium
+  labels:
+    app: horologium
+spec:
+  replicas: 1 # Do not scale up.
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: horologium
+    spec:
+      serviceAccountName: "horologium"
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: horologium
+        image: gcr.io/k8s-prow/horologium:v20190517-95ef25d87
+        args:
+        - --config-path=/etc/config/config.yaml
+        - --dry-run=false
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: config
+      nodeSelector:
+        cloud.google.com/gke-nodepool: prow

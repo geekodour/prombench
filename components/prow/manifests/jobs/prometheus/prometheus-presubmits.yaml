@@ -1,0 +1,16 @@
+presubmits:
+
+  prometheus/prometheus:
+
+  - name: sayhello
+    always_run: false
+    skip_report: false
+    agent: kubernetes
+    trigger: "hello"
+    rerun_command: "hello"
+    spec:
+      containers:
+      - image: docker.io/hello-world:latest
+        imagePullPolicy: Always
+      nodeSelector:
+        cloud.google.com/gke-nodepool: prow

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plugins
+data:
+  plugins.yaml: |
+    triggers:
+    - repos:
+      - prometheus/prometheus
+      - prometheus/prombench
+      trusted_org: prometheus
+      only_org_members: true
+
+    external_plugins:
+      prombench:
+      - name: benchmark
+        events:
+        - pull_request
+
+    config_updater:
+      maps:
+        components/prow/manifests/config_configmap.yaml:
+          name: config
+        components/prow/manifests/plugins_configmap.yaml:
+          name: plugins
+        components/prow/manifests/jobs/**/*.yaml:
+          name: job-config
+          gzip: true
+
+    plugins:
+      prometheus/prometheus:
+      - lgtm
+      - wip
+      prometheus/prombench:
+      - wip
+      - config-updater

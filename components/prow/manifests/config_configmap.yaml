@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+data:
+  config.yaml: |
+    plank:
+      job_url_template: ''
+      report_template: ''
+      job_url_prefix: ''
+      allow_cancellations: true
+      pod_pending_timeout: 60m
+      default_decoration_config:
+        timeout: 2h
+        grace_period: 15s
+        utility_images:
+          clonerefs: "gcr.io/k8s-prow/clonerefs:v20190423-006066e40"
+          initupload: "gcr.io/k8s-prow/initupload:v20190423-006066e40"
+          entrypoint: "gcr.io/k8s-prow/entrypoint:v20190423-006066e40"
+          sidecar: "gcr.io/k8s-prow/sidecar:v20190423-006066e40"
+        gcs_configuration:
+          bucket: "prombench-logs"
+          path_strategy: "explicit"
+        gcs_credentials_secret: "service-account"
+
+    sinker:
+      resync_period: 1m
+      max_prowjob_age: 48h
+      max_pod_age: 30m
+
+    deck:
+      spyglass:
+        size_limit: 500000000 # 500MB
+        gcs_browser_prefix: https://console.cloud.google.com/storage/browser/
+        viewers:
+          "started.json|finished.json": ["metadata-viewer"]
+          "build-log.txt": ["buildlog-viewer"]
+          "artifacts/junit.*\\.xml": ["junit-viewer"]
+
+    prowjob_namespace: default
+    pod_namespace: test-pods
+    log_level: debug
+
+    github_reporter:
+      job_types_to_report:
+      - presubmit
+      - postsubmit
