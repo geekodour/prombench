@@ -13,9 +13,9 @@ triggers:
 
 config_updater:
   maps:
-    manifests/prow/config_configmap.yaml:
+    manifests/prow/config.yaml:
       name: config
-    manifests/prow/plugins_configmap.yaml:
+    manifests/prow/plugins.yaml:
       name: plugins
     manifests/prow/jobs/**/*.yaml:
       name: job-config

@@ -2,9 +2,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: prow-config-bootstrap
+  namespace: default
 spec:
   template:
     spec:
+      serviceAccountName: "config-bootstrapper"
       initContainers:
       - name: clone-prombench
         image: alpine/git:1.0.7
