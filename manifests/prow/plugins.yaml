@@ -24,7 +24,9 @@ config_updater:
 plugins:
   prometheus/prometheus:
   - lgtm
+  - trigger
   - wip
   prometheus/prombench:
   - wip
+  - trigger
   - config-updater
