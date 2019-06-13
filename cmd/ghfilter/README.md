@@ -1,9 +1,9 @@
-# ghfilter
+# simpleargs
 
-`ghfilter` is intended to run inside a [GitHub action](https://github.com/features/actions),
+`simpleargs` is intended to run inside a [GitHub action](https://github.com/features/actions),
 it currently only supports `issue_comments` event.
 
-comment parsing, permission checking, prombench label
+`simpleargas` has direct support for GithubActions with addition of a flag.
 
 It reads `/github/workflow/event.json` and
 
