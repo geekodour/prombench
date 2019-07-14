@@ -6,6 +6,7 @@ spec:
   ttlSecondsAfterFinished: 100
   template:
     spec:
+      restartPolicy: Never
       serviceAccountName: config-updater
       initContainers:
       - name: "clone-prombench"

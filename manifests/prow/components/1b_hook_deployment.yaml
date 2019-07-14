@@ -30,6 +30,7 @@ spec:
         - --github-endpoint=https://api.github.com
         - --config-path=/etc/config/config.yaml
         - --plugin-config=/etc/config/plugins.yaml
+        - --job-config-path=/etc/job-config
         ports:
           - name: http
             containerPort: 8888
@@ -42,6 +43,9 @@ spec:
           readOnly: true
         - name: prow-config
           mountPath: /etc/config
+          readOnly: true
+        - name: job-config
+          mountPath: /etc/job-config
           readOnly: true
         livenessProbe:
           httpGet:
@@ -66,5 +70,8 @@ spec:
       - name: prow-config
         configMap:
           name: prow-config
+      - name: job-config
+        configMap:
+          name: job-config
       nodeSelector:
         cloud.google.com/gke-nodepool: prow

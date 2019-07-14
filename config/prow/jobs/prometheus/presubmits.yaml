@@ -1,0 +1,49 @@
+presubmits:
+
+  prometheus/prometheus:
+
+  - name: start-benchmark
+    always_run: false
+    skip_report: false
+    agent: kubernetes
+    spec:
+      containers:
+      - image: docker.io/prombench/prombench:2.0.1
+        imagePullPolicy: Always
+        command:
+        - "make"
+        args:
+        - "deploy"
+        volumeMounts:
+        - name: serviceaccount
+          mountPath: /etc/serviceaccount/
+          readOnly: true
+      volumes:
+      - name: serviceaccount
+        secret:
+          secretName: service-account
+      nodeSelector:
+        cloud.google.com/gke-nodepool: prow
+
+  - name: cancel-benchmark
+    always_run: false
+    skip_report: false
+    agent: kubernetes
+    spec:
+      containers:
+      - image: docker.io/prombench/prombench:2.0.1
+        imagePullPolicy: Always
+        command:
+        - "make"
+        args:
+        - "clean"
+        volumeMounts:
+        - name: serviceaccount
+          mountPath: /etc/serviceaccount/
+          readOnly: true
+      volumes:
+      - name: serviceaccount
+        secret:
+          secretName: service-account
+      nodeSelector:
+        cloud.google.com/gke-nodepool: prow

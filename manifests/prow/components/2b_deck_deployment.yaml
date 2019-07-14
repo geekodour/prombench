@@ -31,10 +31,14 @@ spec:
         args:
         - --hook-url=http://hook:8888/plugin-help
         - --config-path=/etc/config/config.yaml
+        - --job-config-path=/etc/job-config
         - --spyglass=false
         volumeMounts:
         - name: prow-config
           mountPath: /etc/config
+          readOnly: true
+        - name: job-config
+          mountPath: /etc/job-config
           readOnly: true
         livenessProbe:
           httpGet:
@@ -53,5 +57,8 @@ spec:
       - name: prow-config
         configMap:
           name: prow-config
+      - name: job-config
+        configMap:
+          name: job-config
       nodeSelector:
         cloud.google.com/gke-nodepool: prow

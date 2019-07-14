@@ -1,9 +1,9 @@
 plugins:
-  testpromorg/prometheus:
+  prometheus/prometheus:
   - lgtm
   - wip
   #- prombenchbenchmark
-  testpromorg/prombench:
+  prometheus/prombench:
   - wip
   - config-updater
 
@@ -13,6 +13,8 @@ config_updater:
       name: prow-config
     config/prow/plugins.yaml:
       name: prow-config
+    config/prow/jobs/**/*.yaml:
+      name: job-config
 
 #external_plugins:
 #  prometheus/prombench:
