@@ -16,9 +16,9 @@ config_updater:
     config/prow/jobs/**/*.yaml:
       name: job-config
 
-#external_plugins:
-#  prometheus/prombench:
-#  - name: prombenchbenchmark
-#    endpoint: http://prometheus.io
-#    events:
-#    - pull_request
+external_plugins:
+  prometheus/prombench:
+  - name: prombenchmark-extplugin
+    endpoint: http://prombenchmark-extplugin:8080
+    events:
+    - pull_request
