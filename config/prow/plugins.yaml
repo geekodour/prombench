@@ -17,7 +17,7 @@ config_updater:
       name: job-config
 
 external_plugins:
-  testpromorg/prombench:
+  testpromorg/prometheus:
   - name: prombenchmark-extplugin
     endpoint: http://prombenchmark-extplugin:8080
     events:
