@@ -2,7 +2,6 @@ plugins:
   testpromorg/prometheus:
   - lgtm
   - wip
-  - prombenchbenchmark
   testpromorg/prombench:
   - wip
   - config-updater
