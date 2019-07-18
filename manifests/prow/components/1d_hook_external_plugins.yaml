@@ -20,7 +20,7 @@ spec:
         app: prombenchmark-extplugin
     spec:
       serviceAccountName: "hook"
-      terminationGracePeriodSeconds: 180
+      terminationGracePeriodSeconds: 30
       containers:
       - name: prombenchmark-extplugin
         image: docker.io/prombenchgeekodour/prombenchmark:0.0.1

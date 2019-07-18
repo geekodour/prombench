@@ -24,6 +24,16 @@ import (
 	"k8s.io/test-infra/prow/plugins"
 )
 
+type githubClient interface {
+	CreateComment(org, repo string, number int, comment string) error
+	GetPullRequest(org, repo string, number int) (*pgithub.PullRequest, error)
+	IsMember(org, user string) (bool, error)
+	RemoveLabel(org, repo string, number int, label string) error
+	AddLabel(org, repo string, number int, label string) error
+	GetIssueLabels(org, repo string, number int) ([]pgithub.Label, error)
+	GetRef(org, repo, ref string) (string, error)
+}
+
 type benchmarkInfo struct {
 	prNum   int
 	release string
@@ -38,7 +48,7 @@ type benchmarkInfo struct {
 
 type server struct {
 	tokenGenerator func() []byte
-	ghc            pgithub.Client
+	ghc            githubClient
 	log            *logrus.Entry
 	config         options
 	prowconfig     *config.Config
@@ -282,7 +292,7 @@ func (s *server) triggerProwJob(bi benchmarkInfo, jobName string) error {
 	labels[pgithub.EventGUID] = bi.guid // pjs need this
 
 	// k8s client
-	k, err := kube.NewClientInCluster("test-pods") // 0d_test-pods_namespace.yaml
+	k, err := kube.NewClientInCluster("default")
 	if err != nil {
 		return fmt.Errorf("could not create k8s client")
 	}

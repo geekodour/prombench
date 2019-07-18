@@ -17,25 +17,6 @@ rules:
       - create
       - list
       - update
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: "plank"
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: "plank"
-subjects:
-- kind: ServiceAccount
-  name: "plank"
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: test-pods
-  name: "plank"
-rules:
   - apiGroups:
       - ""
     resources:
@@ -48,7 +29,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  namespace: test-pods
   name: "plank"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -57,4 +37,3 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: "plank"
-  namespace: default

@@ -56,7 +56,7 @@ func main() {
 		logrus.WithError(err).Fatal("Error starting secrets agent.")
 	}
 
-	githubClient := pgithub.NewClient(secretAgent.GetTokenGenerator(cfg.oauthFile), "https://api.github.com")
+	githubClient := pgithub.NewClient(secretAgent.GetTokenGenerator(cfg.oauthFile), "https://api.github.com", "https://api.github.com")
 
 	server := &server{
 		tokenGenerator: secretAgent.GetTokenGenerator(cfg.hmacFile),

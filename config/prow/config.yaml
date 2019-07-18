@@ -19,7 +19,7 @@ sinker:
   max_pod_age: 30m
 
 prowjob_namespace: default
-pod_namespace: test-pods
+pod_namespace: default
 log_level: debug
 
 github_reporter:
