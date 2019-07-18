@@ -1,6 +1,6 @@
 presubmits:
 
-  prometheus/prometheus:
+  testpromorg/prometheus:
 
   - name: start-benchmark
     always_run: false
@@ -8,7 +8,7 @@ presubmits:
     agent: kubernetes
     spec:
       containers:
-      - image: docker.io/prombench/prombench:2.0.1
+      - image: docker.io/prombenchgeekodour/prombench:2.0.4
         imagePullPolicy: Always
         command:
         - "make"
@@ -31,7 +31,7 @@ presubmits:
     agent: kubernetes
     spec:
       containers:
-      - image: docker.io/prombench/prombench:2.0.1
+      - image: docker.io/prombenchgeekodour/prombench:2.0.4
         imagePullPolicy: Always
         command:
         - "make"

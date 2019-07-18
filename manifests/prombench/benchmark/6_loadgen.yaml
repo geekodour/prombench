@@ -55,7 +55,7 @@ metadata:
   name: prometheus-loadgen-scaler
   namespace: prombench-{{ .PR_NUMBER }}
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: loadgen-scaler
@@ -96,7 +96,7 @@ metadata:
   name: prometheus-loadgen-querier
   namespace: prombench-{{ .PR_NUMBER }}
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: loadgen-querier

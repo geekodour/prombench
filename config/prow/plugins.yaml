@@ -1,9 +1,9 @@
 plugins:
-  prometheus/prometheus:
+  testpromorg/prometheus:
   - lgtm
   - wip
   #- prombenchbenchmark
-  prometheus/prombench:
+  testpromorg/prombench:
   - wip
   - config-updater
 
@@ -17,7 +17,7 @@ config_updater:
       name: job-config
 
 external_plugins:
-  prometheus/prombench:
+  testpromorg/prombench:
   - name: prombenchmark-extplugin
     endpoint: http://prombenchmark-extplugin:8080
     events:

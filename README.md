@@ -79,7 +79,7 @@ export DOMAIN_NAME=prombench.prometheus.io // Can be set to any other custom dom
 
 ```
 ./prombench gke resource apply -a $AUTH_FILE -v PROJECT_ID:$PROJECT_ID \
-    -v ZONE:$ZONE -v CLUSTER_NAME:$CLUSTER_NAME \
+    -v ZONE:$ZONE -v CLUSTER_NAME:$CLUSTER_NAME -v DOMAIN_NAME:$DOMAIN_NAME \
     -f manifests/prow/components
 ```
 

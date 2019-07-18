@@ -1,4 +1,4 @@
-DOCKER_REPO             ?= prombench
+DOCKER_REPO             ?= prombenchgeekodour
 
 include Makefile.common
 
