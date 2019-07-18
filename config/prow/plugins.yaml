@@ -18,6 +18,6 @@ config_updater:
 external_plugins:
   testpromorg/prometheus:
   - name: prombenchmark-extplugin
-    endpoint: http://prombenchmark-extplugin:8080
+    #endpoint: http://prombenchmark-extplugin
     events:
-    - pull_request
+    - issue_comment
