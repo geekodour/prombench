@@ -46,6 +46,12 @@ type benchmarkInfo struct {
 	comment pgithub.IssueComment
 }
 
+type commentTemplateInfo struct {
+	Domain  string
+	PrNo    int
+	Release string
+}
+
 type server struct {
 	tokenGenerator func() []byte
 	ghc            githubClient
@@ -81,7 +87,6 @@ The Prometheus servers being benchmarked can be viewed at :
 - {{ .release }} - [{{ .domain }}/{{ .prNum }}/prometheus-release]({{ .domain }}/{{ .prNum }}/prometheus-release)
 
 To stop the benchmark process comment **/benchmark cancel** .`
-const benchmarkCancelComment = `benchmark cancel successful`
 
 func helpProvider(enabledRepos []string) (*pluginhelp.PluginHelp, error) {
 	pluginHelp := &pluginhelp.PluginHelp{
@@ -191,7 +196,12 @@ func (s *server) handleIssueComment(ic pgithub.IssueCommentEvent) error {
 		if err != nil {
 			s.log.Errorln("error parsing benchmark comment")
 		}
-		if err := parsedTemplate.Execute(&buf, bi); err != nil {
+		commentInfo := commentTemplateInfo{
+			PrNo:    bi.prNum,
+			Domain:  bi.domain,
+			Release: bi.release,
+		}
+		if err := parsedTemplate.Execute(&buf, commentInfo); err != nil {
 			s.log.Errorln("error executing benchmark comment")
 		}
 		s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, buf.String()))
