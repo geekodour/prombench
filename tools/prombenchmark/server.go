@@ -74,17 +74,17 @@ var benchmarkCancelRe = regexp.MustCompile(`(?mi)^/benchmark\s+cancel\s*$`)
 const maxTries = 50
 const benchmarkCommentTmpl = `Welcome to Prometheus Benchmarking Tool.
 
-The two prometheus versions that will be compared are _**pr-{{ .prNum }}**_ and _**{{ .release }}**_
+The two prometheus versions that will be compared are _**pr-{{ .PrNo }}**_ and _**{{ .Release }}**_
 
 The logs can be viewed at the links provided in the GitHub check blocks at the end of this conversation
 
 After successfull deployment, the benchmarking metrics can be viewed at :
-- [prometheus-meta](http://{{ .domain }}/prometheus-meta) - label **{namespace="prombench-{{ .prNum }}"}**
-- [grafana](http://{{ .domain }}/grafana) - template-variable **"pr-number" : {{ .prNum }}**
+- [prometheus-meta](http://{{ .Domain }}/prometheus-meta) - label **{namespace="prombench-{{ .PrNo }}"}**
+- [grafana](http://{{ .Domain }}/grafana) - template-variable **"pr-number" : {{ .PrNo }}**
 
 The Prometheus servers being benchmarked can be viewed at :
-- PR - [{{ .domain }}/{{ .prNum }}/prometheus-pr]({{ .domain }}/{{ .prNum }}/prometheus-pr)
-- {{ .release }} - [{{ .domain }}/{{ .prNum }}/prometheus-release]({{ .domain }}/{{ .prNum }}/prometheus-release)
+- PR - [{{ .Domain }}/{{ .PrNo }}/prometheus-pr](http://{{ .Domain }}/{{ .PrNo }}/prometheus-pr)
+- {{ .Release }} - [{{ .Domain }}/{{ .PrNo }}/prometheus-release](http://{{ .Domain }}/{{ .PrNo }}/prometheus-release)
 
 To stop the benchmark process comment **/benchmark cancel** .`
 
