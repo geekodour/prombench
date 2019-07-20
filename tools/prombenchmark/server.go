@@ -152,27 +152,29 @@ func (s *server) handleIssueComment(ic pgithub.IssueCommentEvent) error {
 		return s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, resp))
 	}
 
-	// check if benchmark is already running
-	labels, err := s.ghc.GetIssueLabels(bi.org, bi.repo, bi.prNum)
+	bi.pr, err = s.ghc.GetPullRequest(bi.org, bi.repo, bi.prNum)
 	if err != nil {
-		return fmt.Errorf("failed to get the labels")
-	}
-	for _, label := range labels {
-		if label.Name == benchmarkLabel {
-			resp := "Looks like benchmarking is already running for this PR.<br/> You can cancel benchmarking by commenting `/benchmark cancel`. :smiley:"
-			s.log.Infof("commenting: %v", resp)
-			return s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, resp))
-		} else if label.Name == benchmarkPendingLabel {
-			resp := "Looks like a job is already lined up for this PR.<br/> Please try again once all pending jobs have finished :smiley:"
-			s.log.Infof("commenting: %v", resp)
-			return s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, resp))
-		}
+		return err
 	}
 
-	// all checks passed, trigger the benchmark
+	bi.baseSHA, err = s.ghc.GetRef(bi.org, bi.repo, "heads/"+bi.pr.Base.Ref)
+	if err != nil {
+		return err
+	}
+
+	// check comment match
 	if benchmarkRe.MatchString(bi.comment.Body) {
 
 		s.log.Info("requested a benchmark start")
+
+		// check labels
+		ok, err := s.labelsOk(bi, true)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("label mismatch")
+		}
 
 		group := benchmarkRe.FindStringSubmatch(bi.comment.Body)
 		version := strings.TrimSpace(group[1])
@@ -182,16 +184,6 @@ func (s *server) handleIssueComment(ic pgithub.IssueCommentEvent) error {
 			bi.release = "master"
 		} else {
 			bi.release = "v" + version
-		}
-
-		bi.pr, err = s.ghc.GetPullRequest(bi.org, bi.repo, bi.prNum)
-		if err != nil {
-			return err
-		}
-
-		bi.baseSHA, err = s.ghc.GetRef(bi.org, bi.repo, "heads/"+bi.pr.Base.Ref)
-		if err != nil {
-			return err
 		}
 
 		// add comment
@@ -221,8 +213,15 @@ func (s *server) handleIssueComment(ic pgithub.IssueCommentEvent) error {
 
 	} else if benchmarkCancelRe.MatchString(bi.comment.Body) {
 		s.log.Info("requested a benchmark cancel")
+		ok, err := s.labelsOk(bi, false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("label mismatch")
+		}
 
-		err := s.triggerProwJob(bi, "cancel-benchmark")
+		err = s.triggerProwJob(bi, "cancel-benchmark")
 		if err != nil {
 			s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, fmt.Sprintf("Deletion of prombench failed: %v", err)))
 			return fmt.Errorf("failed to create prowjob to cancel-benchmark %v", err)
@@ -317,6 +316,11 @@ func (s *server) waitForPrombenchPJsToEnd(bi benchmarkInfo, jobName string) erro
 	if err != nil {
 		return err
 	}
+
+	if len(pjl.PJs) == 0 {
+		return nil
+	}
+
 	if !isBenchmarkAllowed(s.log, bi.prNum, &pjl) {
 		s.log.Infof("need to wait for %s to finish", jobName)
 		comment := fmt.Sprintf("Looks like %s job is already running on this PR. Will start %s job once ongoing job is completed", pjl.PJs[0].Name, jobName)
@@ -334,8 +338,9 @@ func (s *server) waitForPrombenchPJsToEnd(bi benchmarkInfo, jobName string) erro
 			s.log.Debugf("%d: %s is ongoing. Retrying after 30 seconds.", i, pjl.PJs[0].Name)
 			retry := time.Second * 30
 			time.Sleep(retry)
+		} else {
+			return nil
 		}
-		return nil
 	}
 
 	return fmt.Errorf("ongoing %s job was not finished after trying for %d times", pjl.PJs[0].Name, maxTries)
@@ -386,4 +391,25 @@ func isBenchmarkAllowed(l *logrus.Entry, prNum int, pjl *prowjobList) bool {
 	}
 
 	return false
+}
+
+func (s *server) labelsOk(bi benchmarkInfo, startComment bool) (bool, error) {
+	labels, err := s.ghc.GetIssueLabels(bi.org, bi.repo, bi.prNum)
+	if err != nil {
+		return false, fmt.Errorf("failed to get the labels")
+	}
+	for _, label := range labels {
+		if label.Name == benchmarkLabel && startComment {
+			resp := "Looks like benchmarking is already running for this PR.<br/> You can cancel benchmarking by commenting `/benchmark cancel`. :smiley:"
+			s.log.Infof("commenting: %v", resp)
+			err := s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, resp))
+			return false, err
+		} else if label.Name == benchmarkPendingLabel {
+			resp := "Looks like a job is already lined up for this PR.<br/> Please try again once all pending jobs have finished :smiley:"
+			s.log.Infof("commenting: %v", resp)
+			err := s.ghc.CreateComment(bi.org, bi.repo, bi.prNum, plugins.FormatICResponse(bi.comment, resp))
+			return false, err
+		}
+	}
+	return true, nil
 }
