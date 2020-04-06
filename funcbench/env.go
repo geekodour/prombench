@@ -44,8 +44,6 @@ type environment struct {
 
 	benchFunc     string
 	compareTarget string
-
-	home string
 }
 
 func (e environment) BenchFunc() string     { return e.benchFunc }
@@ -98,17 +96,14 @@ type GitHub struct {
 	logLink string
 }
 
-func newGitHubEnv(ctx context.Context, e environment, owner, repo string, prNumber int) (Environment, error) {
-	if e.home == "" {
-		e.home = "."
-	}
-
-	if err := os.Chdir(e.home); err != nil {
-		return nil, err
+func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string, prNumber int) (Environment, error) {
+	workspace, ok := os.LookupEnv("GITHUB_WORKSPACE")
+	if !ok {
+		return nil, errors.Errorf("funcbench is not running inside GitHub Actions")
 	}
 
 	ghClient := newGitHubClient(owner, repo, prNumber)
-	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", e.home, ghClient.repo), false, &git.CloneOptions{
+	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", workspace, ghClient.repo), false, &git.CloneOptions{
 		URL:      fmt.Sprintf("https://github.com/%s/%s.git", ghClient.owner, ghClient.repo),
 		Progress: os.Stdout,
 		Depth:    1,
@@ -118,8 +113,8 @@ func newGitHubEnv(ctx context.Context, e environment, owner, repo string, prNumb
 		return nil, errors.Wrap(err, "git clone")
 	}
 
-	if err := os.Chdir(filepath.Join(os.Getenv("GITHUB_WORKSPACE"), ghClient.repo)); err != nil {
-		return nil, errors.Wrapf(err, "changing to GITHUB_WORKSPACE/%s dir", ghClient.repo)
+	if err := os.Chdir(filepath.Join(workspace, ghClient.repo)); err != nil {
+		return nil, errors.Wrapf(err, "changing to %s/%s dir", workspace, ghClient.repo)
 	}
 
 	g := &GitHub{

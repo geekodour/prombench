@@ -39,6 +39,7 @@ type Logger interface {
 
 type logger struct {
 	*log.Logger
+
 	verbose bool
 }
 
@@ -55,7 +56,6 @@ func main() {
 		owner          string
 		repo           string
 		resultsDir     string
-		workDir        string
 		ghPr           int
 		benchTime      time.Duration
 		benchTimeout   time.Duration
@@ -67,8 +67,6 @@ func main() {
 		filepath.Base(os.Args[0]),
 		"Benchmark and compare your Go code between sub benchmarks or commits.",
 	)
-	// FIXME: at the end put all the command desc in one line like the prometheus codebase.
-	// Options.
 	app.HelpFlag.Short('h')
 	app.Flag("verbose", "Verbose mode. Errors includes trace and commands output are logged.").
 		Short('v').BoolVar(&cfg.verbose)
@@ -81,11 +79,8 @@ func main() {
 		IntVar(&cfg.ghPr) // FIXME: will this create a branch with the PR name??
 		// FIXME: worktree??
 	app.Flag("result-dir", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
-		Default("fb-results").
+		Default("funcbench").
 		StringVar(&cfg.resultsDir) // TODO: probably should have a default.
-	app.Flag("workspace", "A directory where source code will be cloned to.").
-		Default(os.Getenv("WORKSPACE")). // FIXME: change default to .
-		StringVar(&cfg.workDir)
 
 	app.Flag("bench-time", " FIXME ").
 		Short('t').Default("1s").DurationVar(&cfg.benchTime)
@@ -98,7 +93,8 @@ func main() {
 		"funcbench will run once and try to compare between 2 sub-benchmarks. "+
 		"Errors out if there are no sub-benchmarks.").
 		Required().StringVar(&cfg.compareTarget) // FIXME: can this be the commit of a branch that's not checked out
-	app.Arg("function-regex", "Function to use for benchmark. Supports RE2 regexp or `.` to run all benchmarks.").
+	app.Arg("function-regex", "Function to use for benchmark. Supports RE2 regexp or `.` "+
+		"to run all benchmarks.").
 		Required().
 		StringVar(&cfg.benchFuncRegex) // FIXME: can we use Default("") instead of having to make this Required.
 
@@ -121,11 +117,12 @@ func main() {
 			)
 
 			if cfg.ghPr == 0 {
+				// Local Environment
+				// TODO (geekodour): GKE funcbench should be running on this environment.
 				env, err = newLocalEnv(environment{
 					logger:        logger,
 					benchFunc:     cfg.benchFuncRegex,
 					compareTarget: cfg.compareTarget,
-					home:          os.Getenv("HOME"),
 				})
 				if err != nil {
 					return errors.Wrap(err, "new env")
@@ -133,14 +130,14 @@ func main() {
 				// TODO (geekodour): do better logging for when all benchmarks are running.
 				logger.Printf("funcbench start [Local Mode]: Benchmarking current version versus %q for benchmark funcs: %q\n", cfg.compareTarget, cfg.benchFuncRegex)
 			} else {
+				// Github Actions Environment
 				if cfg.owner == "" || cfg.repo == "" {
 					return errors.New("funcbench in GitHub Mode requires --owner and --repo flags to be specified")
 				}
-				env, err = newGitHubEnv(ctx, environment{
+				env, err = newGitHubActionsEnv(ctx, environment{
 					logger:        logger,
 					benchFunc:     cfg.benchFuncRegex,
 					compareTarget: cfg.compareTarget,
-					home:          cfg.workDir,
 				}, cfg.owner, cfg.repo, cfg.ghPr)
 				if err != nil {
 					return errors.Wrap(err, "new env")
