@@ -194,6 +194,7 @@ type gitHubClient struct {
 }
 
 func newGitHubClient(owner, repo string, prNumber int) (*gitHubClient, error) {
+	// TODO: add context
 	ghToken, ok := os.LookupEnv("GITHUB_TOKEN")
 	if !ok {
 		return nil, fmt.Errorf("GITHUB_TOKEN missing")

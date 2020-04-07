@@ -89,9 +89,11 @@ func (b *Benchmarker) execBenchmark(pkgRoot string, commit plumbing.Hash) (out s
 		return "", errors.Wrap(err, "benchmark ended with an error.")
 	}
 
-	fn := fileName
+	fn := filepath.Join(b.resultCacheDir, fileName)
 	if b.resultCacheDir != "" {
-		fn = filepath.Join(b.resultCacheDir, fileName)
+		if err := os.MkdirAll(b.resultCacheDir, os.ModePerm); err != nil {
+			return "", err
+		}
 	}
 	if err := ioutil.WriteFile(fn, []byte(out), os.ModePerm); err != nil {
 		return "", err

@@ -79,7 +79,7 @@ func main() {
 		IntVar(&cfg.ghPr) // FIXME: will this create a branch with the PR name??
 		// FIXME: worktree??
 	app.Flag("result-cache", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
-		Default("funcbench").
+		Default("_dev/funcbench").
 		StringVar(&cfg.resultsDir) // TODO: probably should have a default.
 
 	app.Flag("bench-time", " FIXME ").
@@ -267,6 +267,7 @@ func compareTargetRef(ctx context.Context, repo *git.Repository, target string) 
 	}
 
 	if err := repo.FetchContext(ctx, &git.FetchOptions{}); err != nil && err != git.NoErrAlreadyUpToDate {
+		// FIXME: running with ssh
 		return plumbing.ZeroHash, false, err
 	}
 
