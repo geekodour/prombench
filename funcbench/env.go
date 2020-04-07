@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/google/go-github/v29/github"
@@ -66,19 +65,6 @@ func newLocalEnv(e environment) (Environment, error) {
 
 func (l *Local) PostErr(string) error { return nil } // Noop. We will see error anyway.
 
-// formatNs formats ns measurements to expose a useful amount of
-// precision. It mirrors the ns precision logic of testing.B.
-func formatNs(ns float64) string {
-	prec := 0
-	switch {
-	case ns < 10:
-		prec = 2
-	case ns < 100:
-		prec = 1
-	}
-	return strconv.FormatFloat(ns, 'f', prec, 64)
-}
-
 func (l *Local) PostResults(cmps []BenchCmp) error {
 	fmt.Println("Results:")
 	Render(os.Stdout, cmps, false, false, l.compareTarget)
@@ -88,47 +74,40 @@ func (l *Local) PostResults(cmps []BenchCmp) error {
 func (l *Local) Repo() *git.Repository { return l.repo }
 
 // TODO: Add unit test(!).
-type GitHub struct {
+type GitHubActions struct {
 	environment
 
-	repo    *git.Repository
-	client  *gitHubClient
-	logLink string
+	repo   *git.Repository
+	client *gitHubClient
 }
 
 func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string, prNumber int) (Environment, error) {
 	workspace, ok := os.LookupEnv("GITHUB_WORKSPACE")
 	if !ok {
-		return nil, errors.Errorf("funcbench is not running inside GitHub Actions")
+		return nil, errors.New("funcbench is not running inside GitHub Actions")
 	}
 
-	ghClient := newGitHubClient(owner, repo, prNumber)
-	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", workspace, ghClient.repo), false, &git.CloneOptions{
-		URL:      fmt.Sprintf("https://github.com/%s/%s.git", ghClient.owner, ghClient.repo),
+	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", workspace, repo), false, &git.CloneOptions{
+		URL:      fmt.Sprintf("https://github.com/%s/%s.git", owner, repo),
 		Progress: os.Stdout,
 		Depth:    1,
 	})
 	if err != nil {
-		// If repo already exists, git.ErrRepositoryAlreadyExists will be returned.
-		return nil, errors.Wrap(err, "git clone")
+		return nil, errors.Wrap(err, "could not clone repository")
 	}
 
-	if err := os.Chdir(filepath.Join(workspace, ghClient.repo)); err != nil {
-		return nil, errors.Wrapf(err, "changing to %s/%s dir", workspace, ghClient.repo)
+	if err := os.Chdir(filepath.Join(workspace, repo)); err != nil {
+		return nil, errors.Wrapf(err, "changing to %s/%s dir", workspace, repo)
 	}
 
-	g := &GitHub{
+	ghClient, err := newGitHubClient(owner, repo, prNumber)
+	if err != nil {
+		return nil, errors.Wrapf(err, "couldn't create github client")
+	}
+	g := &GitHubActions{
 		environment: e,
 		repo:        r,
 		client:      ghClient,
-		logLink:     fmt.Sprintf("Full logs at: https://github.com/%s/%s/commit/%s/checks", ghClient.owner, ghClient.repo, ghClient.latestCommitHash),
-	}
-
-	if err := os.Setenv("GO111MODULE", "on"); err != nil {
-		return nil, err
-	}
-	if err := os.Setenv("CGO_ENABLED", "0"); err != nil {
-		return nil, err
 	}
 
 	wt, err := g.repo.Worktree()
@@ -138,7 +117,7 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 
 	if err := r.FetchContext(ctx, &git.FetchOptions{
 		RefSpecs: []config.RefSpec{
-			config.RefSpec(fmt.Sprintf("+refs/pull/%d/head:refs/heads/pullrequest", ghClient.prNumber)),
+			config.RefSpec(fmt.Sprintf("+refs/pull/%d/head:refs/heads/pullrequest", prNumber)),
 		},
 		Progress: os.Stdout,
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
@@ -159,47 +138,20 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 	return g, nil
 }
 
-func (g *GitHub) Repo() *git.Repository { return g.repo }
-
-type gitHubClient struct {
-	owner            string
-	repo             string
-	latestCommitHash string
-	prNumber         int
-	client           *github.Client
-}
-
-func newGitHubClient(owner, repo string, prNumber int) *gitHubClient {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")})
-	tc := oauth2.NewClient(context.Background(), ts)
-	c := gitHubClient{
-		client:           github.NewClient(tc),
-		owner:            owner,
-		repo:             repo,
-		prNumber:         prNumber,
-		latestCommitHash: os.Getenv("GITHUB_SHA"),
-	}
-	return &c
-}
-
-func (c *gitHubClient) postComment(comment string) error {
-	issueComment := &github.IssueComment{Body: github.String(comment)}
-	_, _, err := c.client.Issues.CreateComment(context.Background(), c.owner, c.repo, c.prNumber, issueComment)
-	return err
-}
-
-func (g *GitHub) PostErr(err string) error {
-	if err := g.client.postComment(fmt.Sprintf("%v. Logs: %v", err, g.logLink)); err != nil {
+func (g *GitHubActions) PostErr(err string) error {
+	if err := g.client.postComment(fmt.Sprintf("%v. Benchmark did not complete, please check action logs.", err)); err != nil {
 		return errors.Wrap(err, "posting err")
 	}
 	return nil
 }
 
-func (g *GitHub) PostResults(cmps []BenchCmp) error {
+func (g *GitHubActions) PostResults(cmps []BenchCmp) error {
 	b := bytes.Buffer{}
 	Render(&b, cmps, false, false, g.compareTarget)
 	return g.client.postComment(formatCommentToMD(b.String()))
 }
+
+func (g *GitHubActions) Repo() *git.Repository { return g.repo }
 
 func formatCommentToMD(rawTable string) string {
 	tableContent := strings.Split(rawTable, "\n")
@@ -232,4 +184,33 @@ func formatCommentToMD(rawTable string) string {
 	}
 	return strings.Join(tableContent, "\n")
 
+}
+
+type gitHubClient struct {
+	owner    string
+	repo     string
+	prNumber int
+	client   *github.Client
+}
+
+func newGitHubClient(owner, repo string, prNumber int) (*gitHubClient, error) {
+	ghToken, ok := os.LookupEnv("GITHUB_TOKEN")
+	if !ok {
+		return nil, fmt.Errorf("GITHUB_TOKEN missing")
+	}
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: ghToken})
+	tc := oauth2.NewClient(context.Background(), ts)
+	c := gitHubClient{
+		client:   github.NewClient(tc),
+		owner:    owner,
+		repo:     repo,
+		prNumber: prNumber,
+	}
+	return &c, nil
+}
+
+func (c *gitHubClient) postComment(comment string) error {
+	issueComment := &github.IssueComment{Body: github.String(comment)}
+	_, _, err := c.client.Issues.CreateComment(context.Background(), c.owner, c.repo, c.prNumber, issueComment)
+	return err
 }

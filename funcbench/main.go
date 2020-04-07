@@ -78,7 +78,7 @@ func main() {
 	app.Flag("github-pr", "GitHub PR number to pull changes from and to post benchmark results.").
 		IntVar(&cfg.ghPr) // FIXME: will this create a branch with the PR name??
 		// FIXME: worktree??
-	app.Flag("result-dir", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
+	app.Flag("result-cache", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
 		Default("funcbench").
 		StringVar(&cfg.resultsDir) // TODO: probably should have a default.
 
@@ -116,29 +116,24 @@ func main() {
 				err error
 			)
 
+			e := environment{
+				logger:        logger,
+				benchFunc:     cfg.benchFuncRegex,
+				compareTarget: cfg.compareTarget,
+			}
+
 			if cfg.ghPr == 0 {
 				// Local Environment
 				// TODO (geekodour): GKE funcbench should be running on this environment.
-				env, err = newLocalEnv(environment{
-					logger:        logger,
-					benchFunc:     cfg.benchFuncRegex,
-					compareTarget: cfg.compareTarget,
-				})
+				env, err = newLocalEnv(e)
 				if err != nil {
-					return errors.Wrap(err, "new env")
+					return errors.Wrap(err, "new env") // FIXME: improve error message.
 				}
 				// TODO (geekodour): do better logging for when all benchmarks are running.
 				logger.Printf("funcbench start [Local Mode]: Benchmarking current version versus %q for benchmark funcs: %q\n", cfg.compareTarget, cfg.benchFuncRegex)
 			} else {
 				// Github Actions Environment
-				if cfg.owner == "" || cfg.repo == "" {
-					return errors.New("funcbench in GitHub Mode requires --owner and --repo flags to be specified")
-				}
-				env, err = newGitHubActionsEnv(ctx, environment{
-					logger:        logger,
-					benchFunc:     cfg.benchFuncRegex,
-					compareTarget: cfg.compareTarget,
-				}, cfg.owner, cfg.repo, cfg.ghPr)
+				env, err = newGitHubActionsEnv(ctx, e, cfg.owner, cfg.repo, cfg.ghPr)
 				if err != nil {
 					return errors.Wrap(err, "new env")
 				}
@@ -146,7 +141,7 @@ func main() {
 			}
 
 			// ( ◔_◔)ﾉ Start benchmarking!
-			return funcbench(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
+			return startBenchmark(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
 
 		}, func(err error) {
 			cancel()
@@ -168,11 +163,13 @@ func main() {
 	logger.Println("exiting")
 }
 
-func funcbench(
+func startBenchmark(
 	ctx context.Context,
 	env Environment,
 	bench *Benchmarker,
 ) error {
+	var oldResult, newResult string
+
 	wt, _ := env.Repo().Worktree()
 	ref, err := env.Repo().Head()
 	if err != nil {
@@ -184,7 +181,7 @@ func funcbench(
 	}
 
 	// 1. Execute benchmark against packages in the current directory.
-	newResult, err := bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
+	newResult, err = bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
 	if err != nil {
 		// TODO(bwplotka): Just defer posting all errors?
 		if pErr := env.PostErr("Go bench test for this pull request failed"); pErr != nil {
@@ -192,8 +189,6 @@ func funcbench(
 		}
 		return errors.Wrap(err, "exec benchmark A")
 	}
-
-	var oldResult string
 
 	targetCommit, compareWithItself, err := compareTargetRef(ctx, env.Repo(), env.CompareTarget())
 	if err != nil {
