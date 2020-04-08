@@ -53,6 +53,7 @@ func (l *logger) FatalError(err error) {
 func main() {
 	cfg := struct {
 		verbose        bool
+		dryrun         bool
 		owner          string
 		repo           string
 		resultsDir     string
@@ -70,6 +71,8 @@ func main() {
 	app.HelpFlag.Short('h')
 	app.Flag("verbose", "Verbose mode. Errors includes trace and commands output are logged.").
 		Short('v').BoolVar(&cfg.verbose)
+	app.Flag("dryrun", "Dryrun for the GitHub API.").
+		BoolVar(&cfg.dryrun)
 
 	app.Flag("owner", "A Github owner or organisation name.").
 		Default("prometheus").StringVar(&cfg.owner)
@@ -116,32 +119,50 @@ func main() {
 				err error
 			)
 
+			// Setup Environment.
 			e := environment{
 				logger:        logger,
 				benchFunc:     cfg.benchFuncRegex,
 				compareTarget: cfg.compareTarget,
 			}
-
 			if cfg.ghPr == 0 {
-				// Local Environment
-				// TODO (geekodour): GKE funcbench should be running on this environment.
+				// Local Environment.
 				env, err = newLocalEnv(e)
 				if err != nil {
-					return errors.Wrap(err, "new env") // FIXME: improve error message.
+					return errors.Wrap(err, "environment creation error") // FIXME: improve error message.
 				}
-				// TODO (geekodour): do better logging for when all benchmarks are running.
 				logger.Printf("funcbench start [Local Mode]: Benchmarking current version versus %q for benchmark funcs: %q\n", cfg.compareTarget, cfg.benchFuncRegex)
 			} else {
-				// Github Actions Environment
-				env, err = newGitHubActionsEnv(ctx, e, cfg.owner, cfg.repo, cfg.ghPr)
+				// Github Actions Environment.
+				ghClient, err := newGitHubClient(ctx, cfg.owner, cfg.repo, cfg.ghPr, cfg.dryrun) // pass dryrun flag
 				if err != nil {
-					return errors.Wrap(err, "new env")
+					return errors.Wrapf(err, "could not create github client")
+				}
+
+				env, err = newGitHubActionsEnv(ctx, e, ghClient)
+				if err != nil {
+					if pErr := env.PostErr(fmt.Sprintf("%v. Could not setup environment, please check logs.", err)); pErr != nil {
+						return errors.Wrap(err, "could not log error")
+					}
+					return errors.Wrap(err, "environment creation error")
 				}
 				logger.Printf("funcbench start [GitHub Mode]: Benchmarking %q (PR-%d) versus %q for benchmark funcs: %q\n", fmt.Sprintf("%s/%s", cfg.owner, cfg.repo), cfg.ghPr, cfg.compareTarget, cfg.benchFuncRegex)
 			}
 
 			// ( ◔_◔)ﾉ Start benchmarking!
-			return startBenchmark(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
+			cmps, err := startBenchmark(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
+			if err != nil {
+				if cfg.ghPr != 0 {
+					if pErr := env.PostErr(fmt.Sprintf("%v. Benchmark failed, please check logs.", err)); pErr != nil {
+						return errors.Wrap(err, "could not log error")
+					}
+				}
+			}
+
+			// Post results.
+			return env.PostResults(cmps)
+
+			// Report Error/Summary
 			// TODO (geekodour): post a funchbench summary, how long it took etc both in the comment and local setting.
 
 		}, func(err error) {
@@ -169,32 +190,28 @@ func startBenchmark(
 	ctx context.Context,
 	env Environment,
 	bench *Benchmarker,
-) error {
+) ([]BenchCmp, error) {
 	var oldResult, newResult string
 
 	wt, _ := env.Repo().Worktree()
 	ref, err := env.Repo().Head()
 	if err != nil {
-		return errors.Wrap(err, "get head")
+		return nil, errors.Wrap(err, "get head")
 	}
 
 	if _, err := bench.c.exec("bash", "-c", "git update-index -q --ignore-submodules --refresh && git diff-files --quiet --ignore-submodules --"); err != nil {
-		return errors.Wrap(err, "not clean worktree")
+		return nil, errors.Wrap(err, "not clean worktree")
 	}
 
 	// 1. Execute benchmark against packages in the current directory.
 	newResult, err = bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
 	if err != nil {
-		// TODO(bwplotka): Just defer posting all errors?
-		if pErr := env.PostErr("Go bench test for this pull request failed"); pErr != nil {
-			return errors.Errorf("error: %v occured while processing error: %v", pErr, err)
-		}
-		return errors.Wrap(err, "exec benchmark A")
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for %v", ref.Name()))
 	}
 
 	targetCommit, compareWithItself, err := compareTargetRef(ctx, env.Repo(), env.CompareTarget())
 	if err != nil {
-		return errors.Wrap(err, "compareTargetRef")
+		return nil, errors.Wrap(err, "compareTargetRef") // TODO: improve error message
 	}
 
 	if compareWithItself {
@@ -203,12 +220,9 @@ func startBenchmark(
 		// 2a. Compare sub benchmarks. TODO.
 		cmps, err := bench.compareSubBenchmarks(newResult)
 		if err != nil {
-			if pErr := env.PostErr("`benchcmp` failed."); pErr != nil {
-				return errors.Errorf("error: %v occured while processing error: %v", pErr, err)
-			}
-			return errors.Wrap(err, "compare sub benchmarks")
+			return nil, errors.Wrap(err, "comparing sub benchmarks failed")
 		}
-		return errors.Wrap(env.PostResults(cmps), "post results")
+		return cmps, nil
 	}
 
 	bench.logger.Println("Target:", env.CompareTarget(), "is evaluated to be ", targetCommit.String(), ". Assuming comparing with this one (clean workdir will be checked.)")
@@ -220,27 +234,21 @@ func startBenchmark(
 	_, _ = bench.c.exec("git", "worktree", "remove", cmpWorkTreeDir)
 	bench.logger.Println("Checking out (in new workdir):", cmpWorkTreeDir, "commmit", ref.String())
 	if _, err := bench.c.exec("git", "worktree", "add", "-f", cmpWorkTreeDir, ref.Hash().String()); err != nil {
-		return errors.Wrapf(err, "failed to checkout %s in worktree %s", ref.String(), cmpWorkTreeDir)
+		return nil, errors.Wrapf(err, "failed to checkout %s in worktree %s", ref.String(), cmpWorkTreeDir)
 	}
 
 	// 4. Benchmark in new worktree.
 	oldResult, err = bench.execBenchmark(cmpWorkTreeDir, targetCommit)
 	if err != nil {
-		if pErr := env.PostErr(fmt.Sprintf("Go bench test for target %s failed", env.CompareTarget())); pErr != nil {
-			return errors.Errorf("error: %v occured while processing error: %v", pErr, err)
-		}
-		return errors.Wrap(err, "exec bench B")
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for %v", env.CompareTarget()))
 	}
 
 	// 5. Compare old vs new.
 	cmps, err := bench.compareBenchmarks(oldResult, newResult)
 	if err != nil {
-		if pErr := env.PostErr("`benchcmp` failed."); pErr != nil {
-			return errors.Errorf("error: %v occured while processing error: %v", pErr, err)
-		}
-		return errors.Wrap(err, "compare benchmarks")
+		return nil, errors.Wrap(err, "comparing benchmarks failed")
 	}
-	return errors.Wrap(env.PostResults(cmps), "post results")
+	return cmps, nil
 }
 
 func interrupt(logger Logger, cancel <-chan struct{}) error {
@@ -259,6 +267,7 @@ func compareTargetRef(ctx context.Context, repo *git.Repository, target string) 
 	if target == "." {
 		return plumbing.Hash{}, true, nil
 	}
+
 	currRef, err := repo.Head()
 	if err != nil {
 		return plumbing.ZeroHash, false, err

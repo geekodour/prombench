@@ -80,7 +80,7 @@ type GitHubActions struct {
 	client *gitHubClient
 }
 
-func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string, prNumber int) (Environment, error) {
+func newGitHubActionsEnv(ctx context.Context, e environment, gc *gitHubClient) (Environment, error) {
 	// TODO (geekodour): maybe we can change this to WORKSPACE, or maybe not because GA will have
 	// this env var by default, we will hack this feature to use this on GKE
 	workspace, ok := os.LookupEnv("GITHUB_WORKSPACE")
@@ -88,8 +88,8 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 		return nil, errors.New("funcbench is not running inside GitHub Actions")
 	}
 
-	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", workspace, repo), false, &git.CloneOptions{
-		URL:      fmt.Sprintf("https://github.com/%s/%s.git", owner, repo),
+	r, err := git.PlainCloneContext(ctx, fmt.Sprintf("%s/%s", workspace, gc.repo), false, &git.CloneOptions{
+		URL:      fmt.Sprintf("https://github.com/%s/%s.git", gc.owner, gc.repo),
 		Progress: os.Stdout,
 		Depth:    1,
 	})
@@ -97,18 +97,14 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 		return nil, errors.Wrap(err, "could not clone repository")
 	}
 
-	if err := os.Chdir(filepath.Join(workspace, repo)); err != nil {
-		return nil, errors.Wrapf(err, "changing to %s/%s dir", workspace, repo)
+	if err := os.Chdir(filepath.Join(workspace, gc.repo)); err != nil {
+		return nil, errors.Wrapf(err, "changing to %s/%s dir failed", workspace, gc.repo)
 	}
 
-	ghClient, err := newGitHubClient(ctx, owner, repo, prNumber)
-	if err != nil {
-		return nil, errors.Wrapf(err, "couldn't create github client")
-	}
 	g := &GitHubActions{
 		environment: e,
 		repo:        r,
-		client:      ghClient,
+		client:      gc,
 	}
 
 	// TODO: figure out what's happening here!
@@ -119,24 +115,17 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 
 	if err := r.FetchContext(ctx, &git.FetchOptions{
 		RefSpecs: []config.RefSpec{
-			config.RefSpec(fmt.Sprintf("+refs/pull/%d/head:refs/heads/pullrequest", prNumber)),
-			// TODO (geekodour): better ref format?
+			config.RefSpec(fmt.Sprintf("+refs/pull/%d/head:refs/heads/pullrequest", gc.prNumber)),
 		},
 		Progress: os.Stdout,
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
-		if pErr := g.PostErr("Switch (fetch) to a pull request branch failed"); pErr != nil {
-			return nil, errors.Wrapf(err, "posting a comment for `fetch` command execution error; postComment err:%v", pErr)
-		}
-		return nil, err
+		return nil, errors.Wrap(err, "fetch to pull request branch failed")
 	}
 
 	if err = wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName("pullrequest"),
 	}); err != nil {
-		if pErr := g.PostErr("Switch to a pull request branch failed"); pErr != nil {
-			return nil, errors.Wrapf(err, "posting a comment for `checkout` command execution error; postComment err:%v", pErr)
-		}
-		return nil, err
+		return nil, errors.Wrap(err, "switch to pull request branch failed")
 	}
 	return g, nil
 }
@@ -161,11 +150,13 @@ type gitHubClient struct {
 	repo     string
 	prNumber int
 	client   *github.Client
+	dryrun   bool
 }
 
-func newGitHubClient(ctx context.Context, owner, repo string, prNumber int) (*gitHubClient, error) {
+func newGitHubClient(ctx context.Context, owner, repo string, prNumber int, dryrun bool) (*gitHubClient, error) {
 	ghToken, ok := os.LookupEnv("GITHUB_TOKEN")
-	if !ok {
+	if !ok && !dryrun {
+		// TODO: verify
 		return nil, fmt.Errorf("GITHUB_TOKEN missing")
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: ghToken})
@@ -175,11 +166,16 @@ func newGitHubClient(ctx context.Context, owner, repo string, prNumber int) (*gi
 		owner:    owner,
 		repo:     repo,
 		prNumber: prNumber,
+		dryrun:   dryrun,
 	}
 	return &c, nil
 }
 
 func (c *gitHubClient) postComment(comment string) error {
+	if c.dryrun {
+		return nil
+	}
+
 	issueComment := &github.IssueComment{Body: github.String(comment)}
 	_, _, err := c.client.Issues.CreateComment(context.Background(), c.owner, c.repo, c.prNumber, issueComment)
 	// TODO (geekodour): should we log comment here?
