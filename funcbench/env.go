@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/go-github/v29/github"
 	"github.com/pkg/errors"
@@ -100,7 +99,7 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 		return nil, errors.Wrapf(err, "changing to %s/%s dir", workspace, repo)
 	}
 
-	ghClient, err := newGitHubClient(owner, repo, prNumber)
+	ghClient, err := newGitHubClient(ctx, owner, repo, prNumber)
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't create github client")
 	}
@@ -153,39 +152,6 @@ func (g *GitHubActions) PostResults(cmps []BenchCmp) error {
 
 func (g *GitHubActions) Repo() *git.Repository { return g.repo }
 
-func formatCommentToMD(rawTable string) string {
-	tableContent := strings.Split(rawTable, "\n")
-	for i := 0; i <= len(tableContent)-1; i++ {
-		e := tableContent[i]
-		switch {
-		case e == "":
-
-		case strings.Contains(e, "old ns/op"):
-			e = "| Benchmark | Old ns/op | New ns/op | Delta |"
-			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
-
-		case strings.Contains(e, "old MB/s"):
-			e = "| Benchmark | Old MB/s | New MB/s | Speedup |"
-			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
-
-		case strings.Contains(e, "old allocs"):
-			e = "| Benchmark | Old allocs | New allocs | Delta |"
-			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
-
-		case strings.Contains(e, "old bytes"):
-			e = "| Benchmark | Old bytes | New bytes | Delta |"
-			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
-
-		default:
-			// Replace spaces with "|".
-			e = strings.Join(strings.Fields(e), "|")
-		}
-		tableContent[i] = e
-	}
-	return strings.Join(tableContent, "\n")
-
-}
-
 type gitHubClient struct {
 	owner    string
 	repo     string
@@ -193,14 +159,13 @@ type gitHubClient struct {
 	client   *github.Client
 }
 
-func newGitHubClient(owner, repo string, prNumber int) (*gitHubClient, error) {
-	// TODO: add context
+func newGitHubClient(ctx context.Context, owner, repo string, prNumber int) (*gitHubClient, error) {
 	ghToken, ok := os.LookupEnv("GITHUB_TOKEN")
 	if !ok {
 		return nil, fmt.Errorf("GITHUB_TOKEN missing")
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: ghToken})
-	tc := oauth2.NewClient(context.Background(), ts)
+	tc := oauth2.NewClient(ctx, ts)
 	c := gitHubClient{
 		client:   github.NewClient(tc),
 		owner:    owner,
@@ -213,5 +178,6 @@ func newGitHubClient(owner, repo string, prNumber int) (*gitHubClient, error) {
 func (c *gitHubClient) postComment(comment string) error {
 	issueComment := &github.IssueComment{Body: github.String(comment)}
 	_, _, err := c.client.Issues.CreateComment(context.Background(), c.owner, c.repo, c.prNumber, issueComment)
+	// TODO (geekodour): should we log comment here?
 	return err
 }

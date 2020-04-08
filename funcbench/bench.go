@@ -142,3 +142,36 @@ func (b *Benchmarker) compareSubBenchmarks(string) ([]BenchCmp, error) {
 	// TODO(bwplotka): Implement.
 	return nil, errors.New("not implemented")
 }
+
+func formatCommentToMD(rawTable string) string {
+	tableContent := strings.Split(rawTable, "\n")
+	for i := 0; i <= len(tableContent)-1; i++ {
+		e := tableContent[i]
+		switch {
+		case e == "":
+
+		case strings.Contains(e, "old ns/op"):
+			e = "| Benchmark | Old ns/op | New ns/op | Delta |"
+			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
+
+		case strings.Contains(e, "old MB/s"):
+			e = "| Benchmark | Old MB/s | New MB/s | Speedup |"
+			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
+
+		case strings.Contains(e, "old allocs"):
+			e = "| Benchmark | Old allocs | New allocs | Delta |"
+			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
+
+		case strings.Contains(e, "old bytes"):
+			e = "| Benchmark | Old bytes | New bytes | Delta |"
+			tableContent = append(tableContent[:i+1], append([]string{"|-|-|-|-|"}, tableContent[i+1:]...)...)
+
+		default:
+			// Replace spaces with "|".
+			e = strings.Join(strings.Fields(e), "|")
+		}
+		tableContent[i] = e
+	}
+	return strings.Join(tableContent, "\n")
+
+}

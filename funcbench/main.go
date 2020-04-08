@@ -266,11 +266,6 @@ func compareTargetRef(ctx context.Context, repo *git.Repository, target string) 
 		return currRef.Hash(), true, errors.Errorf("target: %s is the same as current ref %s (or is on the same commit); No changes would be expected; Aborting", target, currRef.String())
 	}
 
-	if err := repo.FetchContext(ctx, &git.FetchOptions{}); err != nil && err != git.NoErrAlreadyUpToDate {
-		// FIXME: running with ssh
-		return plumbing.ZeroHash, false, err
-	}
-
 	targetRef, err := repo.Reference(plumbing.NewBranchReferenceName(target), false)
 	if err != nil {
 		return plumbing.ZeroHash, false, err
