@@ -142,6 +142,7 @@ func main() {
 
 			// ( ◔_◔)ﾉ Start benchmarking!
 			return startBenchmark(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
+			// TODO (geekodour): post a funchbench summary, how long it took etc both in the comment and local setting.
 
 		}, func(err error) {
 			cancel()
@@ -163,6 +164,7 @@ func main() {
 	logger.Println("exiting")
 }
 
+// startBenchmark  TODO
 func startBenchmark(
 	ctx context.Context,
 	env Environment,

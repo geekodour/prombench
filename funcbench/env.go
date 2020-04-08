@@ -81,6 +81,8 @@ type GitHubActions struct {
 }
 
 func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string, prNumber int) (Environment, error) {
+	// TODO (geekodour): maybe we can change this to WORKSPACE, or maybe not because GA will have
+	// this env var by default, we will hack this feature to use this on GKE
 	workspace, ok := os.LookupEnv("GITHUB_WORKSPACE")
 	if !ok {
 		return nil, errors.New("funcbench is not running inside GitHub Actions")
@@ -109,6 +111,7 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 		client:      ghClient,
 	}
 
+	// TODO: figure out what's happening here!
 	wt, err := g.repo.Worktree()
 	if err != nil {
 		return nil, err
@@ -117,11 +120,12 @@ func newGitHubActionsEnv(ctx context.Context, e environment, owner, repo string,
 	if err := r.FetchContext(ctx, &git.FetchOptions{
 		RefSpecs: []config.RefSpec{
 			config.RefSpec(fmt.Sprintf("+refs/pull/%d/head:refs/heads/pullrequest", prNumber)),
+			// TODO (geekodour): better ref format?
 		},
 		Progress: os.Stdout,
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
 		if pErr := g.PostErr("Switch (fetch) to a pull request branch failed"); pErr != nil {
-			return nil, errors.Wrapf(err, "posting a comment for `checkout` command execution error; postComment err:%v", pErr)
+			return nil, errors.Wrapf(err, "posting a comment for `fetch` command execution error; postComment err:%v", pErr)
 		}
 		return nil, err
 	}
