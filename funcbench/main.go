@@ -80,7 +80,7 @@ func main() {
 		Default("prometheus").StringVar(&cfg.repo)
 	app.Flag("github-pr", "GitHub PR number to pull changes from and to post benchmark results.").
 		IntVar(&cfg.ghPr)
-	app.Flag("result-cache", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
+	app.Flag("result-cache", "Directory to store benchmark results.").
 		Default("_dev/funcbench").
 		StringVar(&cfg.resultsDir)
 
@@ -88,7 +88,8 @@ func main() {
 		Short('t').Default("1s").DurationVar(&cfg.benchTime)
 	app.Flag("timeout", "Benchmark timeout specified in time.Duration format, "+
 		"disabled if set to 0. If test binary runs longer than timeout duration, raise panic.").
-		Default("2h").DurationVar(&cfg.benchTimeout) //FIXME probably should error out and not panic
+		Default("2h").DurationVar(&cfg.benchTimeout)
+	// TODO (geekodour) verify funcbench is responding correctly on timeouts
 
 	app.Arg("target", "Can be one of '.', branch name or commit SHA of the branch "+
 		"to compare against. If set to '.', branch/commit is the same as the current one; "+
@@ -98,8 +99,7 @@ func main() {
 	app.Arg("function-regex", "Function regex to use for benchmark."+
 		"Supports RE2 regexp and is fully anchored, by default will run all benchmarks.").
 		Default(".*").
-		StringVar(&cfg.benchFuncRegex) // FIXME: can we use Default("") instead of having to make this Required.
-		// TODO (geekodour) : validate regex?
+		StringVar(&cfg.benchFuncRegex) // TODO (geekodour) : validate regex?
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -133,7 +133,7 @@ func main() {
 				}
 			} else {
 				// Github Actions Environment.
-				ghClient, err := newGitHubClient(ctx, cfg.owner, cfg.repo, cfg.ghPr, cfg.dryrun) // pass dryrun flag
+				ghClient, err := newGitHubClient(ctx, cfg.owner, cfg.repo, cfg.ghPr, cfg.dryrun)
 				if err != nil {
 					return errors.Wrapf(err, "could not create github client")
 				}
