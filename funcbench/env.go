@@ -58,7 +58,8 @@ func newLocalEnv(e environment) (Environment, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	e.logger.Println("[Local Mode]")
+	e.logger.Println("Benchmarking current version versus", e.compareTarget, "for benchmark funcs:", e.benchFunc)
 	return &Local{environment: e, repo: r}, nil
 }
 
@@ -127,6 +128,9 @@ func newGitHubActionsEnv(ctx context.Context, e environment, gc *gitHubClient) (
 	}); err != nil {
 		return nil, errors.Wrap(err, "switch to pull request branch failed")
 	}
+
+	e.logger.Println("[GitHub Mode]", gc.owner, ":", gc.repo)
+	e.logger.Println("Benchmarking PR-", gc.prNumber, "versus", e.compareTarget, "for benchmark funcs", e.benchFunc)
 	return g, nil
 }
 

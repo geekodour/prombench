@@ -79,11 +79,10 @@ func main() {
 	app.Flag("repo", "This is the repository name.").
 		Default("prometheus").StringVar(&cfg.repo)
 	app.Flag("github-pr", "GitHub PR number to pull changes from and to post benchmark results.").
-		IntVar(&cfg.ghPr) // FIXME: will this create a branch with the PR name??
-		// FIXME: worktree??
+		IntVar(&cfg.ghPr)
 	app.Flag("result-cache", "Directory to store benchmark results. Useful for local runs. ??? FIXME ").
 		Default("_dev/funcbench").
-		StringVar(&cfg.resultsDir) // TODO: probably should have a default.
+		StringVar(&cfg.resultsDir)
 
 	app.Flag("bench-time", " FIXME ").
 		Short('t').Default("1s").DurationVar(&cfg.benchTime)
@@ -96,10 +95,11 @@ func main() {
 		"funcbench will run once and try to compare between 2 sub-benchmarks. "+
 		"Errors out if there are no sub-benchmarks.").
 		Required().StringVar(&cfg.compareTarget) // FIXME: can this be the commit of a branch that's not checked out
-	app.Arg("function-regex", "Function to use for benchmark. Supports RE2 regexp or `.` "+
-		"to run all benchmarks.").
-		Required().
+	app.Arg("function-regex", "Function regex to use for benchmark."+
+		"Supports RE2 regexp and is fully anchored, by default will run all benchmarks.").
+		Default(".*").
 		StringVar(&cfg.benchFuncRegex) // FIXME: can we use Default("") instead of having to make this Required.
+		// TODO (geekodour) : validate regex?
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -129,9 +129,8 @@ func main() {
 				// Local Environment.
 				env, err = newLocalEnv(e)
 				if err != nil {
-					return errors.Wrap(err, "environment creation error") // FIXME: improve error message.
+					return errors.Wrap(err, "environment creation error")
 				}
-				logger.Printf("funcbench start [Local Mode]: Benchmarking current version versus %q for benchmark funcs: %q\n", cfg.compareTarget, cfg.benchFuncRegex)
 			} else {
 				// Github Actions Environment.
 				ghClient, err := newGitHubClient(ctx, cfg.owner, cfg.repo, cfg.ghPr, cfg.dryrun) // pass dryrun flag
@@ -146,7 +145,6 @@ func main() {
 					}
 					return errors.Wrap(err, "environment creation error")
 				}
-				logger.Printf("funcbench start [GitHub Mode]: Benchmarking %q (PR-%d) versus %q for benchmark funcs: %q\n", fmt.Sprintf("%s/%s", cfg.owner, cfg.repo), cfg.ghPr, cfg.compareTarget, cfg.benchFuncRegex)
 			}
 
 			// ( ◔_◔)ﾉ Start benchmarking!
@@ -157,13 +155,12 @@ func main() {
 						return errors.Wrap(err, "could not log error")
 					}
 				}
+				return err
 			}
 
 			// Post results.
+			// TODO (geekodour): probably post some kind of funcbench summary(?)
 			return env.PostResults(cmps)
-
-			// Report Error/Summary
-			// TODO (geekodour): post a funchbench summary, how long it took etc both in the comment and local setting.
 
 		}, func(err error) {
 			cancel()
@@ -185,13 +182,18 @@ func main() {
 	logger.Println("exiting")
 }
 
-// startBenchmark  TODO
+// startBenchmark returns the comparision results.
+// 1. If target is same as current ref, run sub-benchmarks and return instead (TODO).
+// 2. Execute benchmark against packages in the worktree set while setting up the enviroment.
+// 3. Cleanup of worktree in case funcbench was run previously and checkout target worktree.
+// 4. Execute benchmark against packages in the new worktree.
+// 5. Return compared results.
 func startBenchmark(
 	ctx context.Context,
 	env Environment,
 	bench *Benchmarker,
 ) ([]BenchCmp, error) {
-	var oldResult, newResult string
+	worktreeDirName := "_funchbench-cmp"
 
 	wt, _ := env.Repo().Worktree()
 	ref, err := env.Repo().Head()
@@ -203,47 +205,49 @@ func startBenchmark(
 		return nil, errors.Wrap(err, "not clean worktree")
 	}
 
-	// 1. Execute benchmark against packages in the current directory.
-	newResult, err = bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
+	// Get info about target.
+	targetCommit, compareWithItself, err := getTargetInfo(ctx, env.Repo(), env.CompareTarget())
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for %v", ref.Name()))
+		return nil, errors.Wrap(err, "failed to get target info")
 	}
-
-	targetCommit, compareWithItself, err := compareTargetRef(ctx, env.Repo(), env.CompareTarget())
-	if err != nil {
-		return nil, errors.Wrap(err, "compareTargetRef") // TODO: improve error message
-	}
+	bench.logger.Println("Target:", targetCommit.String(), "Current Ref:", ref.Hash().String())
 
 	if compareWithItself {
-		bench.logger.Println("Target:", env.CompareTarget(), "is `.`; Assuming sub-benchmarks comparison.")
+		bench.logger.Println("Assuming sub-benchmarks comparison.")
+		subResult, err := bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("failed to execute sub-benchmark"))
+		}
 
-		// 2a. Compare sub benchmarks. TODO.
-		cmps, err := bench.compareSubBenchmarks(newResult)
+		cmps, err := bench.compareSubBenchmarks(subResult)
 		if err != nil {
 			return nil, errors.Wrap(err, "comparing sub benchmarks failed")
 		}
 		return cmps, nil
 	}
 
-	bench.logger.Println("Target:", env.CompareTarget(), "is evaluated to be ", targetCommit.String(), ". Assuming comparing with this one (clean workdir will be checked.)")
-	// 2b. Compare with target commit/branch.
-
-	// 3. Best effort cleanup of worktree.
-	cmpWorkTreeDir := filepath.Join(wt.Filesystem.Root(), "_funcbench-cmp")
-
-	_, _ = bench.c.exec("git", "worktree", "remove", cmpWorkTreeDir)
-	bench.logger.Println("Checking out (in new workdir):", cmpWorkTreeDir, "commmit", ref.String())
-	if _, err := bench.c.exec("git", "worktree", "add", "-f", cmpWorkTreeDir, ref.Hash().String()); err != nil {
-		return nil, errors.Wrapf(err, "failed to checkout %s in worktree %s", ref.String(), cmpWorkTreeDir)
-	}
-
-	// 4. Benchmark in new worktree.
-	oldResult, err = bench.execBenchmark(cmpWorkTreeDir, targetCommit)
+	bench.logger.Println("Assuming comparing with target (clean workdir will be checked.)")
+	// Execute benchmark A.
+	newResult, err := bench.execBenchmark(wt.Filesystem.Root(), ref.Hash())
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for %v", env.CompareTarget()))
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for A: %v", ref.Name().String()))
 	}
 
-	// 5. Compare old vs new.
+	// Best effort cleanup and checkout new worktree.
+	cmpWorkTreeDir := filepath.Join(wt.Filesystem.Root(), worktreeDirName)
+	_, _ = bench.c.exec("git", "worktree", "remove", cmpWorkTreeDir)
+	bench.logger.Println("Checking out (in new workdir):", cmpWorkTreeDir, "commmit", targetCommit.String())
+	if _, err := bench.c.exec("git", "worktree", "add", "-f", cmpWorkTreeDir, targetCommit.String()); err != nil {
+		return nil, errors.Wrapf(err, "failed to checkout %s in worktree %s", targetCommit.String(), cmpWorkTreeDir)
+	}
+
+	// Execute benchmark B.
+	oldResult, err := bench.execBenchmark(cmpWorkTreeDir, targetCommit)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to execute benchmark for B: %v", env.CompareTarget()))
+	}
+
+	// Compare B vs A.
 	cmps, err := bench.compareBenchmarks(oldResult, newResult)
 	if err != nil {
 		return nil, errors.Wrap(err, "comparing benchmarks failed")
@@ -263,7 +267,9 @@ func interrupt(logger Logger, cancel <-chan struct{}) error {
 	}
 }
 
-func compareTargetRef(ctx context.Context, repo *git.Repository, target string) (ref plumbing.Hash, compareWithItself bool, _ error) {
+// getTargetInfo returns the hash of the target,
+// if target is the same as the current ref, set compareWithItself to true.
+func getTargetInfo(ctx context.Context, repo *git.Repository, target string) (ref plumbing.Hash, compareWithItself bool, _ error) {
 	if target == "." {
 		return plumbing.Hash{}, true, nil
 	}
