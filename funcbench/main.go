@@ -140,8 +140,8 @@ func main() {
 
 				env, err = newGitHubActionsEnv(ctx, e, ghClient)
 				if err != nil {
-					if pErr := env.PostErr(fmt.Sprintf("%v. Could not setup environment, please check logs.", err)); pErr != nil {
-						return errors.Wrap(err, "could not log error")
+					if err := ghClient.postComment(fmt.Sprintf("%v. Could not setup environment, please check logs.", err)); err != nil {
+						return errors.Wrap(err, "could not post error")
 					}
 					return errors.Wrap(err, "environment creation error")
 				}
@@ -150,10 +150,8 @@ func main() {
 			// ( ◔_◔)ﾉ Start benchmarking!
 			cmps, err := startBenchmark(ctx, env, newBenchmarker(logger, env, &commander{verbose: cfg.verbose}, cfg.benchTime, cfg.benchTimeout, cfg.resultsDir))
 			if err != nil {
-				if cfg.ghPr != 0 {
-					if pErr := env.PostErr(fmt.Sprintf("%v. Benchmark failed, please check logs.", err)); pErr != nil {
-						return errors.Wrap(err, "could not log error")
-					}
+				if pErr := env.PostErr(fmt.Sprintf("%v. Benchmark failed, please check logs.", err)); pErr != nil {
+					return errors.Wrap(err, "could not log error")
 				}
 				return err
 			}
@@ -184,9 +182,9 @@ func main() {
 
 // startBenchmark returns the comparision results.
 // 1. If target is same as current ref, run sub-benchmarks and return instead (TODO).
-// 2. Execute benchmark against packages in the worktree set while setting up the enviroment.
+// 2. Execute benchmark against packages in the current worktree.
 // 3. Cleanup of worktree in case funcbench was run previously and checkout target worktree.
-// 4. Execute benchmark against packages in the new worktree.
+// 4. Execute benchmark against packages in the new(target) worktree.
 // 5. Return compared results.
 func startBenchmark(
 	ctx context.Context,
@@ -282,6 +280,8 @@ func getTargetInfo(ctx context.Context, repo *git.Repository, target string) (re
 	if target == strings.TrimPrefix(currRef.Name().String(), "refs/heads/") || target == currRef.Hash().String() {
 		return currRef.Hash(), true, errors.Errorf("target: %s is the same as current ref %s (or is on the same commit); No changes would be expected; Aborting", target, currRef.String())
 	}
+
+	// TODO commit hash does not work
 
 	targetRef, err := repo.Reference(plumbing.NewBranchReferenceName(target), false)
 	if err != nil {

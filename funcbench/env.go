@@ -59,7 +59,8 @@ func newLocalEnv(e environment) (Environment, error) {
 		return nil, err
 	}
 	e.logger.Println("[Local Mode]")
-	e.logger.Println("Benchmarking current version versus", e.compareTarget, "for benchmark funcs:", e.benchFunc)
+	e.logger.Println("Benchmarking current version versus:", e.compareTarget)
+	e.logger.Println("Benchmark func regex:", e.benchFunc)
 	return &Local{environment: e, repo: r}, nil
 }
 
@@ -130,7 +131,8 @@ func newGitHubActionsEnv(ctx context.Context, e environment, gc *gitHubClient) (
 	}
 
 	e.logger.Println("[GitHub Mode]", gc.owner, ":", gc.repo)
-	e.logger.Println("Benchmarking PR-", gc.prNumber, "versus", e.compareTarget, "for benchmark funcs", e.benchFunc)
+	e.logger.Println("Benchmarking PR -", gc.prNumber, "versus:", e.compareTarget)
+	e.logger.Println("Benchmark func regex:", e.benchFunc)
 	return g, nil
 }
 
