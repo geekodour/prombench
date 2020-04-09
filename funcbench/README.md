@@ -59,8 +59,6 @@ By default all benchmarks run without `-race` flag (#275).
 
 #### Example Github actions workflow file to pass in --input flag.
 
-> TODO: No longer using `issue_comment`, to be replaced with commentMonitor usage.
-
 ```
 on: issue_comment // Workflow is executed when a pull request comment is created.
 name: Benchmark

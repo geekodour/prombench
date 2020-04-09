@@ -83,8 +83,6 @@ type GitHubActions struct {
 }
 
 func newGitHubActionsEnv(ctx context.Context, e environment, gc *gitHubClient) (Environment, error) {
-	// TODO (geekodour): maybe we can change this to WORKSPACE, or maybe not because GA will have
-	// this env var by default, we will hack this feature to use this on GKE
 	workspace, ok := os.LookupEnv("GITHUB_WORKSPACE")
 	if !ok {
 		return nil, errors.New("funcbench is not running inside GitHub Actions")
@@ -109,7 +107,6 @@ func newGitHubActionsEnv(ctx context.Context, e environment, gc *gitHubClient) (
 		client:      gc,
 	}
 
-	// TODO: figure out what's happening here!
 	wt, err := g.repo.Worktree()
 	if err != nil {
 		return nil, err
@@ -162,7 +159,6 @@ type gitHubClient struct {
 func newGitHubClient(ctx context.Context, owner, repo string, prNumber int, dryrun bool) (*gitHubClient, error) {
 	ghToken, ok := os.LookupEnv("GITHUB_TOKEN")
 	if !ok && !dryrun {
-		// TODO: verify
 		return nil, fmt.Errorf("GITHUB_TOKEN missing")
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: ghToken})
@@ -184,6 +180,5 @@ func (c *gitHubClient) postComment(comment string) error {
 
 	issueComment := &github.IssueComment{Body: github.String(comment)}
 	_, _, err := c.client.Issues.CreateComment(context.Background(), c.owner, c.repo, c.prNumber, issueComment)
-	// TODO (geekodour): should we log comment here?
 	return err
 }

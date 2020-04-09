@@ -84,21 +84,21 @@ func main() {
 		Default("_dev/funcbench").
 		StringVar(&cfg.resultsDir)
 
-	app.Flag("bench-time", " FIXME ").
+	app.Flag("bench-time", "Run enough iterations of each benchmark to take t, specified "+
+		"as a time.Duration. The special syntax Nx means to run the benchmark N times").
 		Short('t').Default("1s").DurationVar(&cfg.benchTime)
 	app.Flag("timeout", "Benchmark timeout specified in time.Duration format, "+
-		"disabled if set to 0. If test binary runs longer than timeout duration, raise panic.").
-		Default("2h").DurationVar(&cfg.benchTimeout)
-	// TODO (geekodour) verify funcbench is responding correctly on timeouts
+		"disabled if set to 0. If a test binary runs longer than duration d, panic.").
+		Short('d').Default("2h").DurationVar(&cfg.benchTimeout)
 
 	app.Arg("target", "Can be one of '.', branch name or commit SHA of the branch "+
 		"to compare against. If set to '.', branch/commit is the same as the current one; "+
 		"funcbench will run once and try to compare between 2 sub-benchmarks. "+
 		"Errors out if there are no sub-benchmarks.").
-		Required().StringVar(&cfg.compareTarget) // FIXME: can this be the commit of a branch that's not checked out
+		Required().StringVar(&cfg.compareTarget)
 	app.Arg("function-regex", "Function regex to use for benchmark."+
 		"Supports RE2 regexp and is fully anchored, by default will run all benchmarks.").
-		Default(".*").
+		Default(".").
 		StringVar(&cfg.benchFuncRegex) // TODO (geekodour) : validate regex?
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
@@ -281,7 +281,10 @@ func getTargetInfo(ctx context.Context, repo *git.Repository, target string) (re
 		return currRef.Hash(), true, errors.Errorf("target: %s is the same as current ref %s (or is on the same commit); No changes would be expected; Aborting", target, currRef.String())
 	}
 
-	// TODO commit hash does not work
+	commitHash := plumbing.NewHash(target)
+	if !commitHash.IsZero() {
+		return commitHash, false, nil
+	}
 
 	targetRef, err := repo.Reference(plumbing.NewBranchReferenceName(target), false)
 	if err != nil {
