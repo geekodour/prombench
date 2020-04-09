@@ -19,42 +19,16 @@ funcbench can be run locally in the command line aswell as a Github Action. Runn
 |Execute all benchmarks, and compare the results with `devel` branch.|```./funcbench -v devel . ```|
 |Execute all benchmarks matching `BenchmarkFuncName.*` regex, and compare it with `6d280faa16bfca1f26fa426d863afbb564c063d1` commit.|```./funcbench -v 6d280faa16bfca1f26fa426d863afbb564c063d1 BenchmarkFuncName.*```|
 |Execute all benchmarks matching `BenchmarkFuncName.*` regex on current code. Compare it between sub-benchmarks (`b.Run`) of same benchmark for current commit. Errors out if there are no sub-benchmarks.|```./funcbench -v . FuncName.*```|
+|Execute benchmark named `BenchmarkFuncName`, and compare `pr#35` with `master` branch. (`GITHUB_WORKSPACE` need to be set)|```./funcbench --dryrun --github-pr="35" master BenchmarkFuncName```|
 
 ## Triggering with GitHub comments
-The benchmark can be triggered by creating a comment which specifies a branch to compare. The results are then posted back as a PR comment.
-
-Tests are triggered by posting a comment in a PR with the following format:
-
-`/funcbench <branch/commit> <Go test regex>`
-
-Specifying which tests to run are filtered by using the standard [Go regex RE2 language](https://github.com/google/re2/wiki/Syntax).
-
-* To test it locally, set `-w` flag or `WORKSPACE` environment variable to an empty directory where the source will be cloned.
-
-#### Example Github actions workflow file
+The benchmark can be triggered by creating a comment in a PR which specifies a branch to compare. The results are then posted back to the PR as a comment.
 
 ```
-on: issue_comment // Workflow is executed when a pull request comment is created.
-name: Benchmark
-jobs:
-  commentMonitor:
-    runs-on: ubuntu-latest
-    steps:
-    - name: commentMonitor
-      uses: docker://prominfra/comment-monitor:latest
-      env:
-        COMMENT_TEMPLATE: 'The benchmark has started.' // Body of a comment that is created to announce start of a benchmark.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} // Github secret token/
-      with:
-        args: '"^/funcbench ?(?P<BRANCH>[^ B\.]+)? ?(?P<REGEX>\.|Bench.*|[^ ]+)?'
-    - name: benchmark
-      uses: docker://prominfra/funcbench:latest
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} // Github secret token/
+/funcbench <branch/commit> <benchmark function regex>
 ```
 
 ## Building Docker container.
-
 From the repository root:
 
 `docker build -t <tag of your choice> -f funcbench/Dockerfile .`
